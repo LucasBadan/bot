@@ -7,6 +7,7 @@ import {
   PublishGeneratedPostJobData,
   QUEUE_NAME,
 } from './queue.constants';
+import { PUBLISH_OFFER_JOB, PublishOfferJobData } from './queue.constants';
 
 @Injectable()
 export class QueueService {
@@ -20,6 +21,16 @@ export class QueueService {
       attempts: 3,
       removeOnComplete: true,
       removeOnFail: false,
+    });
+  }
+
+  async enqueuePublishOffer(data: PublishOfferJobData, delayMs: number = 0) {
+    return this.queue.add(PUBLISH_OFFER_JOB, data, {
+      delay: delayMs,
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5000 },
+      removeOnComplete: 100,
+      removeOnFail: 100,
     });
   }
 

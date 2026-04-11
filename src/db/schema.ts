@@ -362,6 +362,11 @@ export const monitorKeywords = pgTable('monitor_keywords', {
   id: uuid('id').defaultRandom().primaryKey(),
   term: varchar('term', { length: 160 }).notNull(),
   marketplace: marketplaceEnum('marketplace').notNull(),
+  mlProductId: varchar('ml_product_id', { length: 50 }), // ← ADICIONA
+  minDiscountPercent: numeric('min_discount_percent', {
+    precision: 5,
+    scale: 2,
+  }), // ← ADICIONA
   isActive: boolean('is_active').default(true).notNull(),
   lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
   ...timestamps,

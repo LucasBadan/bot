@@ -6,6 +6,7 @@ import { DbModule } from '../db/db.module';
 import { QUEUE_NAME } from './queue.constants';
 import { QueueProcessor } from './queue.processor';
 import { QueueService } from './queue.service';
+import { WhapiModule } from '../modules/whapi/whapi.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { QueueService } from './queue.service';
     DbModule,
     MercadoLivreModule,
     WhatsappModule,
+    WhapiModule,
   ],
   providers: [QueueService, QueueProcessor],
   exports: [QueueService],

@@ -9,17 +9,13 @@ import { ChannelsModule } from './modules/channels/channels.module';
 import { PostsModule } from './modules/posts/posts.module';
 import { OffersMonitorModule } from './modules/offers-monitor/offers-monitor.module';
 import { WhapiModule } from './modules/whapi/whapi.module';
+import { ScheduleModule } from '@nestjs/schedule';
+
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
-    BullModule.forRoot({
-      connection: {
-        host: '127.0.0.1',
-        port: 6379,
-      },
-    }),
+    ConfigModule.forRoot({ isGlobal: true }),
+    BullModule.forRoot({ connection: { host: '127.0.0.1', port: 6379 } }),
+    ScheduleModule.forRoot(), // ← ADICIONA AQUI
     DbModule,
     MercadoLivreModule,
     QueueModule,

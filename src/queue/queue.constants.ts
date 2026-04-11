@@ -13,3 +13,24 @@ export type PublishGeneratedPostJobData = {
   generatedPostId: string;
   channelId: string;
 };
+
+export const PUBLISH_OFFER_JOB = 'publish-offer';
+
+export type PublishOfferJobData = {
+  groupId: string;
+  oferta: {
+    id: string;
+    title: string;
+    price: number;
+    pixPrice?: number | null;
+    originalPrice: number | null;
+    permalink: string;
+    affiliateLink: string | null;
+    thumbnail: string | null;
+    installments: { quantity: number; amount: number; rate: string } | null;
+    keyword: string;
+    variant?: string | null;
+    variantAlert?: boolean;
+    isDropped: boolean;
+  };
+};

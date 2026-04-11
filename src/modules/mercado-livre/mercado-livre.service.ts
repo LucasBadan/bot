@@ -1,34 +1,19 @@
-import {
-  BadGatewayException,
-  BadRequestException,
-  Injectable,
-  Logger,
-  UnauthorizedException,
-} from '@nestjs/common';
-import axios from 'axios';
-import * as cheerio from 'cheerio';
-import { and, eq } from 'drizzle-orm';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { eq } from 'drizzle-orm';
 import { ConfigService } from '@nestjs/config';
 import { DbService } from 'src/db/db.service';
 import * as schema from 'src/db/schema';
-import { SearchMercadoLivreDto } from './dto/search-mercado-livre.dto';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
+import * as cheerio from 'cheerio';
 
-const { products, marketplaceAccounts } = schema;
-
-type MercadoLivreSearchItem = {
-  id: string;
-  title: string;
-  price: string;
-  link: string;
-  thumbnail: string | null;
-};
+const { marketplaceAccounts } = schema;
 
 type MercadoLivreProductDetails = {
   id: string;
   title: string;
   price: number;
+  pixPrice?: number | null;
   originalPrice?: number | null;
   permalink: string;
   affiliateLink: string | null;
@@ -64,198 +49,171 @@ export class MercadoLivreService {
       this.configService.get<string>('ML_AFFILIATE_TAG') || null;
   }
 
-  // 🎯 BUSCA AFILIADA (API PRIMEIRO + Scraping FALLBACK) ✅ COM LOGS DEBUG
   async searchProductsAfiliado(
     query: string,
+    mlProductId?: string,
   ): Promise<MercadoLivreProductDetails | null> {
-    if (this.mlUseMock) {
-      this.logger.log(`[MercadoLivre] mock habilitado para "${query}"`);
-
-      const mockResult: MercadoLivreProductDetails = {
-        id: 'MLB000000001',
-        title: `Produto mock para ${query}`,
-        price: 199.9,
-        originalPrice: 249.9,
-        permalink: 'https://www.mercadolivre.com.br/',
-        affiliateLink: null,
-        thumbnail: null,
-        installments: null,
-        coupon: null,
-      };
-
-      return mockResult;
-    }
+    if (this.mlUseMock) return this.getMockProduct(query);
 
     try {
-      this.logger.log(`[MercadoLivre] Buscando "${query}" via API oficial...`);
+      const authHeader = await this.getAuthHeader();
 
-      const mlAccount =
-        await this.dbService.db.query.marketplaceAccounts.findFirst({
-          where: (table) => eq(table.platform, 'mercado_livre'),
-        });
-
-      if (!mlAccount) {
-        this.logger.error(
-          '[MercadoLivre] Conta não autorizada — faça o fluxo OAuth primeiro',
-        );
-        return null;
-      }
-      this.logger.debug(
-        `[MercadoLivre] Token usado: ${mlAccount.accessToken.substring(0, 20)}...`,
-      );
-      this.logger.debug(
-        `[MercadoLivre] Token completo: ${mlAccount.accessToken}`,
-      );
-      const searchResponse = await firstValueFrom(
-        this.httpService.get(`${this.mlApiUrl}/products/search`, {
-          params: {
-            status: 'active',
-            q: query,
-            site_id: 'MLB',
-            limit: 5,
-          },
-          timeout: 10000,
-          headers: {
-            Authorization: `Bearer ${mlAccount.accessToken}`,
-          },
-        }),
-      );
-
-      const results = searchResponse?.data?.results;
-
-      if (!Array.isArray(results) || results.length === 0) {
-        this.logger.warn(`[MercadoLivre] Nenhum resultado para "${query}"`);
-        return null;
+      if (mlProductId) {
+        return await this.fetchProductById(mlProductId, authHeader);
       }
 
-      const bestMatch =
-        results?.find(
-          (item: any) =>
-            item?.id &&
-            item?.name &&
-            item?.pictures?.length > 0 &&
-            item?.status === 'active',
-        ) ||
-        results?.find(
-          (item: any) => item?.id && item?.name && item?.pictures?.length > 0,
-        ) ||
-        results?.[0];
-
-      if (!bestMatch?.id) {
-        this.logger.warn(`[MercadoLivre] Resultado inválido para "${query}"`);
-        return null;
-      }
-
-      const details = await this.fetchProductDetails(
-        bestMatch.id,
-        mlAccount.accessToken,
-      );
-
-      if (!details?.permalink) {
-        this.logger.warn(
-          `[MercadoLivre] Não foi possível obter detalhes do produto ${bestMatch.id}`,
-        );
-        return null;
-      }
-
-      const result: MercadoLivreProductDetails = {
-        ...details,
-        affiliateLink: null,
-      };
-
-      this.logger.log(
-        `[MercadoLivre] ✅ Produto encontrado para "${query}": ${result.id}`,
-      );
-
-      return result;
+      this.logger.warn(`[ML] Sem mlProductId para "${query}"`);
+      return null;
     } catch (error: any) {
-      this.logger.error(
-        `[MercadoLivre] API falhou para "${query}": ${
-          error instanceof Error ? error.message : 'Erro desconhecido'
-        }`,
-      );
-      this.logger.error(
-        `[MercadoLivre] Detalhes do erro: ${JSON.stringify(error?.response?.data)}`,
-      );
+      this.logger.error(`[ML] Erro "${query}": ${error?.message}`);
       return null;
     }
   }
-  // 🔗 LINK AFILIADO (PROVISÓRIO - SEMPRE RETORNA PERMALINK REAL)
 
-  private normalizeThumbnail(thumbnail: string | null): string | null {
-    if (!thumbnail) return null;
-
-    if (thumbnail.startsWith('//')) {
-      return `https:${thumbnail}`;
-    }
-
-    return thumbnail;
-  }
-
-  /** NOVO: Normaliza qualquer formato de preço brasileiro */
-
-  // 📊 DETALHES COMPLETOS POR API
-  async fetchProductDetails(
+  async fetchProductById(
     productId: string,
-    accessToken: string,
+    authHeader: Record<string, string>,
   ): Promise<MercadoLivreProductDetails | null> {
     try {
+      // 1. Busca dados do produto (nome, imagem)
       const productResponse = await firstValueFrom(
         this.httpService.get(`${this.mlApiUrl}/products/${productId}`, {
-          timeout: 8000,
-          headers: { Authorization: `Bearer ${accessToken}` },
+          timeout: 10000,
+          headers: authHeader,
         }),
       );
 
-      const item = productResponse.data;
-      if (!item?.id || !item?.name) return null;
+      const product = productResponse.data;
+      if (!product?.id) return null;
+
+      const thumbnail = product.pictures?.[0]?.url ?? null;
+      const permalink = `https://www.mercadolivre.com.br/p/${product.id}`;
 
       let price = 0;
+      let pixPrice: number | null = null;
       let originalPrice: number | null = null;
-      let permalink = `https://www.mercadolivre.com.br/p/${item.id}`;
+      let installments: {
+        quantity: number;
+        amount: number;
+        rate: string;
+      } | null = null;
 
       try {
-        const itemsResponse = await firstValueFrom(
+        // 2. Busca itens do produto
+        const priceResponse = await firstValueFrom(
           this.httpService.get(`${this.mlApiUrl}/products/${productId}/items`, {
-            params: { limit: 1 },
+            params: { limit: 20 },
             timeout: 8000,
-            headers: { Authorization: `Bearer ${accessToken}` },
+            headers: authHeader,
           }),
         );
-        const firstItem = itemsResponse?.data?.results?.[0];
-        if (firstItem) {
-          price = Number(firstItem.price);
-          originalPrice = firstItem.original_price
-            ? Number(firstItem.original_price)
-            : null;
-          permalink = firstItem.permalink || permalink;
+
+        const items: any[] = priceResponse?.data?.results ?? [];
+
+        this.logger.debug(
+          `[ML] ${items.length} itens encontrados para ${productId}`,
+        );
+
+        if (items.length > 0) {
+          // Menor preço entre todos os vendedores
+          const best = items.reduce((min: any, item: any) =>
+            Number(item.price) < Number(min.price) ? item : min,
+          );
+
+          this.logger.log(
+            `[ML] Item escolhido: ${best.item_id} | R$ ${best.price} | original: ${best.original_price}`,
+          );
+
+          // 3. Busca detalhes completos do item para pegar parcelas e preço Pix
+          try {
+            const itemResponse = await firstValueFrom(
+              this.httpService.get(`${this.mlApiUrl}/items/${best.item_id}`, {
+                timeout: 8000,
+                // sem token - endpoint público
+              }),
+            );
+
+            const itemDetail = itemResponse.data;
+
+            this.logger.debug(
+              `[ML] sale_price: ${JSON.stringify(itemDetail.sale_price)}`,
+            );
+
+            price = Number(itemDetail.price ?? best.price ?? 0);
+            originalPrice = itemDetail.original_price
+              ? Number(itemDetail.original_price)
+              : null;
+
+            if (itemDetail.sale_price?.amount) {
+              pixPrice = Number(itemDetail.sale_price.amount);
+              this.logger.log(`[ML] Preço Pix: R$ ${pixPrice}`);
+            }
+
+            installments = itemDetail.installments
+              ? {
+                  quantity: itemDetail.installments.quantity,
+                  amount: itemDetail.installments.amount,
+                  rate:
+                    itemDetail.installments.rate === 0
+                      ? 'sem juros'
+                      : `${itemDetail.installments.rate}%`,
+                }
+              : null;
+
+            this.logger.log(
+              `[ML] Cartão: R$ ${price} | Pix: R$ ${pixPrice} | Parcelas: ${installments?.quantity}x R$ ${installments?.amount} ${installments?.rate}`,
+            );
+          } catch (error: any) {
+            // ✅ LOG DETALHADO DO ERRO
+            this.logger.warn(
+              `[ML] /items/${best.item_id} falhou | status: ${error?.response?.status} | erro: ${JSON.stringify(error?.response?.data)}`,
+            );
+            // fallback com estimativa de parcelas
+            price = Number(best.price ?? 0);
+            originalPrice = best.original_price
+              ? Number(best.original_price)
+              : null;
+            installments = {
+              quantity: 10,
+              amount: Math.round((price / 10) * 100) / 100,
+              rate: 'sem juros',
+            };
+          }
         }
       } catch {
-        this.logger.warn(
-          `[MercadoLivre] Preço não encontrado para ${productId}, usando 0`,
-        );
+        this.logger.warn(`[ML] Não foi possível obter itens para ${productId}`);
       }
 
+      // 4. Resolve link afiliado
+      const affiliateLink = await this.buildAffiliateLinkShort(
+        permalink,
+        this.mlAffiliateTag,
+      );
+
+      this.logger.log(`[ML] ✅ ${product.name} - R$ ${price}`);
+
       return {
-        id: item.id,
-        title: item.name,
+        id: product.id,
+        title: product.name,
         price,
+        pixPrice,
         originalPrice,
         permalink,
-        affiliateLink: null,
-        thumbnail: item.pictures?.[0]?.url
-          ? this.normalizeThumbnail(item.pictures[0].url)
-          : null,
-        installments: null,
+        affiliateLink,
+        thumbnail: thumbnail ? this.normalizeThumbnail(thumbnail) : null,
+        installments,
         coupon: null,
       };
     } catch (error: any) {
-      this.logger.warn(
-        `[MercadoLivre] Detalhes ${productId} falhou: ${JSON.stringify(error?.response?.data || error?.message)}`,
+      this.logger.error(
+        `[ML] fetchProductById ${productId}: ${JSON.stringify(
+          error?.response?.data || error?.message,
+        )}`,
       );
       return null;
     }
   }
+
   getAuthorizationUrl() {
     const clientId = this.configService.get<string>('ML_CLIENT_ID');
     const redirectUri = this.configService.get<string>('ML_REDIRECT_URI');
@@ -279,6 +237,7 @@ export class MercadoLivreService {
     if (!result) return [];
     return [result];
   }
+
   async saveAuthorizedAccount(code: string) {
     const clientId = this.configService.get<string>('ML_CLIENT_ID');
     const clientSecret = this.configService.get<string>('ML_CLIENT_SECRET');
@@ -300,7 +259,6 @@ export class MercadoLivreService {
     );
 
     const data = response.data;
-
     const expiresAt = new Date(Date.now() + data.expires_in * 1000);
 
     const [account] = await this.dbService.db
@@ -340,13 +298,126 @@ export class MercadoLivreService {
     );
   }
 
-  // SLUGFY PRIVADO
-  private slugify(text: string): string {
-    return text
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '');
+  private async getAuthHeader(): Promise<Record<string, string>> {
+    try {
+      const account =
+        await this.dbService.db.query.marketplaceAccounts.findFirst({
+          where: (table) => eq(table.platform, 'mercado_livre'),
+        });
+
+      if (!account) return {};
+
+      const isExpired =
+        new Date(account.expiresAt).getTime() < Date.now() + 5 * 60 * 1000;
+
+      if (isExpired && account.refreshToken) {
+        const refreshed = await this.refreshToken(account);
+        if (refreshed) return { Authorization: `Bearer ${refreshed}` };
+        return {};
+      }
+
+      return account.accessToken
+        ? { Authorization: `Bearer ${account.accessToken}` }
+        : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private async refreshToken(account: any): Promise<string | null> {
+    try {
+      const clientId = this.configService.get<string>('ML_CLIENT_ID');
+      const clientSecret = this.configService.get<string>('ML_CLIENT_SECRET');
+      const tokenUrl = this.configService.get<string>('ML_TOKEN_URL');
+
+      if (!clientId || !clientSecret || !tokenUrl) return null;
+
+      const response = await firstValueFrom(
+        this.httpService.post(tokenUrl, {
+          grant_type: 'refresh_token',
+          client_id: clientId,
+          client_secret: clientSecret,
+          refresh_token: account.refreshToken,
+        }),
+      );
+
+      const data = response.data;
+      const expiresAt = new Date(Date.now() + data.expires_in * 1000);
+
+      await this.dbService.db
+        .update(schema.marketplaceAccounts)
+        .set({
+          accessToken: data.access_token,
+          refreshToken: data.refresh_token ?? account.refreshToken,
+          expiresAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.marketplaceAccounts.id, account.id));
+
+      this.logger.log('[ML] Token renovado com sucesso');
+      return data.access_token;
+    } catch (error: any) {
+      this.logger.error(`[ML] Falha ao renovar token: ${error?.message}`);
+      return null;
+    }
+  }
+
+  private async shortenLink(url: string): Promise<string> {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get('https://tinyurl.com/api-create.php', {
+          params: { url },
+          timeout: 5000,
+        }),
+      );
+      return response.data as string;
+    } catch (error: any) {
+      this.logger.warn(
+        `[TinyURL] Erro: ${error?.message} - status: ${error?.response?.status}`,
+      );
+      return url;
+    }
+  }
+
+  async buildAffiliateLinkShort(
+    permalink: string,
+    tag: string | null,
+  ): Promise<string | null> {
+    if (!tag || !permalink) return null;
+    try {
+      const mattTool = this.configService.get<string>('ML_MATT_TOOL') ?? '';
+      const url = new URL(permalink);
+      url.searchParams.set('matt_word', tag);
+      if (mattTool) url.searchParams.set('matt_tool', mattTool);
+
+      const longLink = url.toString();
+      const shortLink = await this.shortenLink(longLink);
+
+      this.logger.log(`[ML] Link afiliado: ${shortLink}`);
+      return shortLink;
+    } catch {
+      return null;
+    }
+  }
+
+  private normalizeThumbnail(thumbnail: string | null): string | null {
+    if (!thumbnail) return null;
+    if (thumbnail.startsWith('//')) return `https:${thumbnail}`;
+    return thumbnail;
+  }
+
+  private getMockProduct(query: string): MercadoLivreProductDetails {
+    return {
+      id: 'MLB000000001',
+      title: `Produto mock para ${query}`,
+      price: 199.9,
+      pixPrice: 179.9,
+      originalPrice: 249.9,
+      permalink: 'https://www.mercadolivre.com.br/',
+      affiliateLink: null,
+      thumbnail: null,
+      installments: { quantity: 10, amount: 19.99, rate: 'sem juros' },
+      coupon: null,
+    };
   }
 }

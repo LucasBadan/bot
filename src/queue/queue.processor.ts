@@ -5,11 +5,14 @@ import { eq } from 'drizzle-orm';
 import { MercadoLivreService } from '../modules/mercado-livre/mercado-livre.service';
 import { DbService } from '../db/db.service';
 import { WhatsappService } from '../publishers/whatsapp/whatsapp.service';
+import { WhapiService } from '../modules/whapi/whapi.service';
 import { generatedPosts, publishLogs, publisherChannels } from '../db/schema';
 import {
   MERCADO_LIVRE_SYNC_JOB,
   PUBLISH_GENERATED_POST_JOB,
+  PUBLISH_OFFER_JOB,
   PublishGeneratedPostJobData,
+  PublishOfferJobData,
   QUEUE_NAME,
 } from './queue.constants';
 
@@ -22,6 +25,7 @@ export class QueueProcessor extends WorkerHost {
     private readonly mercadoLivreService: MercadoLivreService,
     private readonly db: DbService,
     private readonly whatsappService: WhatsappService,
+    private readonly whapiService: WhapiService,
   ) {
     super();
   }
@@ -41,10 +45,91 @@ export class QueueProcessor extends WorkerHost {
           job as Job<PublishGeneratedPostJobData>,
         );
 
+      case PUBLISH_OFFER_JOB:
+        return this.handlePublishOffer(job as Job<PublishOfferJobData>);
+
       default:
         this.logger.warn(`Job desconhecido: ${job.name}`);
         return { ignored: true };
     }
+  }
+
+  private async handlePublishOffer(job: Job<PublishOfferJobData>) {
+    const { groupId, oferta } = job.data;
+
+    this.logger.log(
+      `[PublishOffer] Publicando "${oferta.title}" no grupo ${groupId}`,
+    );
+
+    const message = this.formatarMensagem(oferta);
+
+    if (oferta.thumbnail) {
+      await this.whapiService.sendImage(groupId, oferta.thumbnail, message);
+    } else {
+      await this.whapiService.sendText(groupId, message);
+    }
+
+    this.logger.log(`[PublishOffer] ✅ "${oferta.title}" publicado`);
+
+    return { success: true };
+  }
+
+  private formatCurrency(value: number): string {
+    return value.toLocaleString('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    });
+  }
+
+  private formatarMensagem(oferta: PublishOfferJobData['oferta']): string {
+    const finalLink = oferta.affiliateLink || oferta.permalink || '';
+
+    const discount =
+      oferta.originalPrice && oferta.originalPrice > oferta.price
+        ? Math.round(
+            ((oferta.originalPrice - oferta.price) / oferta.originalPrice) *
+              100,
+          )
+        : null;
+
+    const header = oferta.isDropped
+      ? '📉 *FICOU AINDA MAIS BARATO!*'
+      : '🔥 *OFERTA IMPERDÍVEL*';
+
+    const variantLine =
+      oferta.variantAlert && oferta.variant
+        ? `⚠️ *Apenas: ${oferta.variant}*`
+        : oferta.variant
+          ? `📦 Modelo: ${oferta.variant}`
+          : null;
+
+    const installmentLine = oferta.installments
+      ? `💳 *${oferta.installments.quantity}x de ${this.formatCurrency(oferta.installments.amount)} ${oferta.installments.rate}*`
+      : null;
+    const pixLine = oferta.pixPrice
+      ? `💸 *R$ ${oferta.pixPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} no Pix*`
+      : null;
+
+    return [
+      header,
+      `🔎 ${oferta.keyword}`,
+      '',
+      `*${oferta.title}*`,
+      variantLine,
+      '',
+      oferta.originalPrice
+        ? `~~De: ${this.formatCurrency(oferta.originalPrice)}~~`
+        : null,
+      `💰 *Por: ${this.formatCurrency(oferta.price)}*`,
+      pixLine,
+      discount ? `📉 *${discount}% OFF*` : null,
+      installmentLine,
+      '',
+      '👇 *Compre agora* 👇',
+      finalLink,
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
 
   private async handlePublishGeneratedPost(
@@ -54,10 +139,7 @@ export class QueueProcessor extends WorkerHost {
 
     await this.db.db
       .update(publishLogs)
-      .set({
-        queueJobStatus: 'active',
-        updatedAt: new Date(),
-      })
+      .set({ queueJobStatus: 'active', updatedAt: new Date() })
       .where(eq(publishLogs.id, publishLogId));
 
     const [post] = await this.db.db
@@ -65,26 +147,17 @@ export class QueueProcessor extends WorkerHost {
       .from(generatedPosts)
       .where(eq(generatedPosts.id, generatedPostId));
 
-    if (!post) {
-      throw new Error('Generated post not found');
-    }
+    if (!post) throw new Error('Generated post not found');
 
     const [channel] = await this.db.db
       .select()
       .from(publisherChannels)
       .where(eq(publisherChannels.id, channelId));
 
-    if (!channel) {
-      throw new Error('Publisher channel not found');
-    }
-
-    if (!channel.isActive) {
-      throw new Error('Publisher channel is inactive');
-    }
-
-    if (channel.type !== 'whatsapp') {
+    if (!channel) throw new Error('Publisher channel not found');
+    if (!channel.isActive) throw new Error('Publisher channel is inactive');
+    if (channel.type !== 'whatsapp')
       throw new Error(`Unsupported channel type: ${channel.type}`);
-    }
 
     const text = [
       post.title ? `🔥 ${post.title}` : null,
@@ -114,11 +187,7 @@ export class QueueProcessor extends WorkerHost {
       })
       .where(eq(publishLogs.id, publishLogId));
 
-    return {
-      success: true,
-      publishLogId,
-      messageId: result.messageId ?? null,
-    };
+    return { success: true, publishLogId, messageId: result.messageId ?? null };
   }
 
   @OnWorkerEvent('completed')

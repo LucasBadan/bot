@@ -1,5 +1,10 @@
 [
-  { "id": "1", "term": "perfume lancome" },
-  { "id": "2", "term": "ssd 1tb" },
-  { "id": "3", "term": "iphone 15" }
+  {
+    "id": "1",
+    "term": "iphone 15",
+    "mlProductId": "MLB1027172667",
+    "variant": "128GB Azul",
+    "minDiscount": 10,
+    "variantAlert": false
+  }
 ]
