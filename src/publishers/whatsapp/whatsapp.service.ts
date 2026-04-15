@@ -242,7 +242,7 @@ export class WhatsappService {
             template: {
               name: 'ola_mund',
               language: {
-                code: 'en_US', // ou 'pt_BR' se disponível
+                code: 'en', // ou 'pt_BR' se disponível
               },
             },
           },

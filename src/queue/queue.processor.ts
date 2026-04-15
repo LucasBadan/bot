@@ -5,7 +5,6 @@ import { eq } from 'drizzle-orm';
 import { MercadoLivreService } from '../modules/mercado-livre/mercado-livre.service';
 import { DbService } from '../db/db.service';
 import { WhatsappService } from '../publishers/whatsapp/whatsapp.service';
-import { WhapiService } from '../modules/whapi/whapi.service';
 import { generatedPosts, publishLogs, publisherChannels } from '../db/schema';
 import {
   MERCADO_LIVRE_SYNC_JOB,
@@ -15,6 +14,7 @@ import {
   PublishOfferJobData,
   QUEUE_NAME,
 } from './queue.constants';
+import { BaileysService } from '../modules/baileys/baileys.service';
 
 @Injectable()
 @Processor(QUEUE_NAME)
@@ -25,7 +25,7 @@ export class QueueProcessor extends WorkerHost {
     private readonly mercadoLivreService: MercadoLivreService,
     private readonly db: DbService,
     private readonly whatsappService: WhatsappService,
-    private readonly whapiService: WhapiService,
+    private readonly baileysService: BaileysService,
   ) {
     super();
   }
@@ -64,13 +64,12 @@ export class QueueProcessor extends WorkerHost {
     const message = this.formatarMensagem(oferta);
 
     if (oferta.thumbnail) {
-      await this.whapiService.sendImage(groupId, oferta.thumbnail, message);
+      await this.baileysService.sendImage(groupId, oferta.thumbnail, message);
     } else {
-      await this.whapiService.sendText(groupId, message);
+      await this.baileysService.sendText(groupId, message);
     }
 
     this.logger.log(`[PublishOffer] ✅ "${oferta.title}" publicado`);
-
     return { success: true };
   }
 

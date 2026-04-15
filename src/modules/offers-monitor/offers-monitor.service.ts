@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MercadoLivreService } from '../mercado-livre/mercado-livre.service';
-import { WhapiService } from '../whapi/whapi.service';
 import { DbService } from 'src/db/db.service';
 import { QueueService } from 'src/queue/queue.service';
 import { eq, and, desc } from 'drizzle-orm';
@@ -39,7 +38,6 @@ export class OffersMonitorService {
   constructor(
     private readonly configService: ConfigService,
     private readonly mercadoLivreService: MercadoLivreService,
-    private readonly whapiService: WhapiService,
     private readonly dbService: DbService,
     private readonly queueService: QueueService,
   ) {}

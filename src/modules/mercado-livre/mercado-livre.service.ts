@@ -389,12 +389,7 @@ export class MercadoLivreService {
       const url = new URL(permalink);
       url.searchParams.set('matt_word', tag);
       if (mattTool) url.searchParams.set('matt_tool', mattTool);
-
-      const longLink = url.toString();
-      const shortLink = await this.shortenLink(longLink);
-
-      this.logger.log(`[ML] Link afiliado: ${shortLink}`);
-      return shortLink;
+      return url.toString(); // ← retorna direto sem encurtar
     } catch {
       return null;
     }

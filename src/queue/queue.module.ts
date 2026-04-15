@@ -6,8 +6,7 @@ import { DbModule } from '../db/db.module';
 import { QUEUE_NAME } from './queue.constants';
 import { QueueProcessor } from './queue.processor';
 import { QueueService } from './queue.service';
-import { WhapiModule } from '../modules/whapi/whapi.module';
-
+import { BaileysModule } from '../modules/baileys/baileys.module';
 @Module({
   imports: [
     BullModule.registerQueue({
@@ -25,7 +24,7 @@ import { WhapiModule } from '../modules/whapi/whapi.module';
     DbModule,
     MercadoLivreModule,
     WhatsappModule,
-    WhapiModule,
+    BaileysModule,
   ],
   providers: [QueueService, QueueProcessor],
   exports: [QueueService],

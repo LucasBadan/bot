@@ -115,18 +115,7 @@ export class WhatsappController {
       type: 'template',
       template: {
         name: templateName,
-        language: { code: 'pt_BR' },
-        components: [
-          {
-            type: 'body',
-            parameters: [
-              {
-                type: 'text',
-                text: 'Teste Mercado Livre Bot funcionando!',
-              },
-            ],
-          },
-        ],
+        language: { code: 'en' },
       },
     };
 
