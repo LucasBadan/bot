@@ -6,6 +6,7 @@ import {
   Query,
   Res,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Response as ExpressResponse } from 'express';
@@ -42,13 +43,22 @@ export class WhatsappController {
 
   @Post('test-offer')
   async testOffer(@Body() body: { to: string; query: string }) {
+    if (!body?.to?.trim()) {
+      throw new BadRequestException('Campo "to" é obrigatório');
+    }
+
+    if (!body?.query?.trim()) {
+      throw new BadRequestException('Campo "query" é obrigatório');
+    }
+
     const products = await this.mercadoLivreService.searchProducts(body.query);
 
-    if (!products.length) {
+    if (!products || products.length === 0) {
       return { message: 'Nenhum produto encontrado' };
     }
 
     const product = products[0];
+
     const result = await this.whatsappService.sendProductOffer({
       to: body.to,
       product: {
@@ -89,7 +99,6 @@ export class WhatsappController {
 
   @Post('test-template')
   async testTemplate(@Body() body: any) {
-    // ✅ CORRIGIDO: usa variáveis do .env
     const apiUrl = this.configService.get<string>('WHATSAPP_API_URL');
     const apiVersion = this.configService.get<string>('WHATSAPP_API_VERSION');
     const phoneNumberId = this.configService.get<string>(
@@ -100,7 +109,6 @@ export class WhatsappController {
       'WHATSAPP_TEMPLATE_NAME',
     );
 
-    // Log para debug
     console.log('ENVIANDO TEMPLATE COM:', {
       apiUrl,
       apiVersion,
@@ -135,7 +143,6 @@ export class WhatsappController {
 
   @Post('test-send-text')
   async testSendText(@Body() body: any) {
-    // ✅ CORRIGIDO: usa variáveis do .env
     const apiUrl = this.configService.get<string>('WHATSAPP_API_URL');
     const apiVersion = this.configService.get<string>('WHATSAPP_API_VERSION');
     const phoneNumberId = this.configService.get<string>(
@@ -143,7 +150,6 @@ export class WhatsappController {
     );
     const accessToken = this.configService.get<string>('WHATSAPP_ACCESS_TOKEN');
 
-    // Log para debug
     console.log('ENVIANDO TEXTO COM:', {
       apiUrl,
       apiVersion,

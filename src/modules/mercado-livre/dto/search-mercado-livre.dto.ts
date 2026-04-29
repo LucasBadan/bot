@@ -1,5 +1,4 @@
 import { IsInt, IsNotEmpty, IsOptional, IsString } from 'class-validator';
-import { Transform } from 'class-transformer';
 
 export class SearchMercadoLivreDto {
   @IsString()
@@ -13,4 +12,10 @@ export class SearchMercadoLivreDto {
   @IsOptional()
   @IsString()
   categoryId?: string; // ← ADICIONA ISSO
+}
+
+export class SendShopeeOfferDto {
+  chatId!: string;
+  productId!: string;
+  affiliateLink!: string;
 }

@@ -20,11 +20,11 @@ export class MercadoLivreController {
   async authCallback(@Query('code') code?: string) {
     if (!code) throw new BadRequestException('Code não recebido');
 
-    const saved = await this.mercadoLivreService.saveAuthorizedAccount(code);
+    const account = await this.mercadoLivreService.saveAuthorizedAccount(code);
 
     return {
-      message: 'Autenticação realizada com sucesso',
-      account: saved.account,
+      message: 'Conta autorizada com sucesso',
+      account,
     };
   }
   @Get('me')

@@ -10,7 +10,7 @@ import { PostsModule } from './modules/posts/posts.module';
 import { OffersMonitorModule } from './modules/offers-monitor/offers-monitor.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BaileysModule } from './modules/baileys/baileys.module';
-
+import { ShopeeModule } from './modules/shopee/shopee.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -24,6 +24,7 @@ import { BaileysModule } from './modules/baileys/baileys.module';
     PostsModule,
     OffersMonitorModule,
     BaileysModule,
+    ShopeeModule,
   ],
 })
 export class AppModule {}

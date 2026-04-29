@@ -7,6 +7,7 @@ import { WhatsappModule } from 'src/publishers/whatsapp/whatsapp.module';
 import { DbModule } from 'src/db/db.module';
 import { QueueModule } from 'src/queue/queue.module';
 import { BaileysModule } from '../baileys/baileys.module';
+import { ShopeeModule } from '../shopee/shopee.module';
 @Module({
   imports: [
     ConfigModule,
@@ -15,6 +16,7 @@ import { BaileysModule } from '../baileys/baileys.module';
     DbModule,
     QueueModule,
     BaileysModule,
+    ShopeeModule,
   ],
   controllers: [OffersMonitorController],
   providers: [OffersMonitorService],

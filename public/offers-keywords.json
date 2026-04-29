@@ -2,9 +2,18 @@
   {
     "id": "1",
     "term": "iphone 15",
+    "marketplace": "mercadolivre",
     "mlProductId": "MLB1027172667",
-    "variant": "128GB Azul",
     "minDiscount": 10,
+    "variant": "128GB Azul",
     "variantAlert": false
-  }
+  },
+
+  {
+  "id": "2",
+  "term": "fone bluetooth",
+  "marketplace": "shopee",
+  "shopeeItemId": "24442629738"
+}
+
 ]

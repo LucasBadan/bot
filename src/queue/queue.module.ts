@@ -7,16 +7,15 @@ import { QUEUE_NAME } from './queue.constants';
 import { QueueProcessor } from './queue.processor';
 import { QueueService } from './queue.service';
 import { BaileysModule } from '../modules/baileys/baileys.module';
+import { OfferMessageFormatterService } from './queue-offer-message-formatter-service';
+
 @Module({
   imports: [
     BullModule.registerQueue({
       name: QUEUE_NAME,
       defaultJobOptions: {
         attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 5000,
-        },
+        backoff: { type: 'exponential', delay: 5000 },
         removeOnComplete: 100,
         removeOnFail: 100,
       },
@@ -26,7 +25,7 @@ import { BaileysModule } from '../modules/baileys/baileys.module';
     WhatsappModule,
     BaileysModule,
   ],
-  providers: [QueueService, QueueProcessor],
-  exports: [QueueService],
+  providers: [QueueService, QueueProcessor, OfferMessageFormatterService],
+  exports: [QueueService, OfferMessageFormatterService],
 })
 export class QueueModule {}

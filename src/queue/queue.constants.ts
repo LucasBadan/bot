@@ -23,14 +23,20 @@ export type PublishOfferJobData = {
     title: string;
     price: number;
     pixPrice?: number | null;
-    originalPrice: number | null;
+    originalPrice?: number | null;
     permalink: string;
-    affiliateLink: string | null;
-    thumbnail: string | null;
-    installments: { quantity: number; amount: number; rate: string } | null;
-    keyword: string;
+    affiliateLink?: string | null;
+    thumbnail?: string | null;
+    installments?: {
+      quantity: number;
+      amount: number;
+      rate: string | null;
+    } | null;
+    coupon?: string | null;
+    keyword?: string;
     variant?: string | null;
     variantAlert?: boolean;
     isDropped: boolean;
+    marketplace?: 'mercado_livre' | 'shopee';
   };
 };
